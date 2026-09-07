@@ -1,0 +1,81 @@
+<div class="app">
+  <h1>Simulasi Rangkaian Listrik</h1>
+  <p class="subtitle">Rangkaian Seri & Paralel</p>
+
+  <div class="controls">
+    <label>Mode:
+      <select id="mode">
+        <option value="series">Seri</option>
+        <option value="parallel">Paralel</option>
+      </select>
+    </label>
+
+    <label>Tegangan:
+      <input id="voltage" type="range" min="1" max="24" value="12">
+      <span id="voltageValue">12 V</span>
+    </label>
+
+    <label>R1:
+      <input id="r1" type="range" min="1" max="20" value="4">
+      <span id="r1Value">4 Ω</span>
+    </label>
+
+    <label>R2:
+      <input id="r2" type="range" min="1" max="20" value="8">
+      <span id="r2Value">8 Ω</span>
+    </label>
+
+    <button id="switchBtn">🔴 Saklar OFF</button>
+  </div>
+
+  <div class="circuit">
+    <div class="battery">🔋 <span id="batteryText">12 V</span></div>
+
+    <div class="wire"></div>
+
+    <div class="component">
+      <div class="lamp" id="lamp1">💡</div>
+      <b>R1</b>
+      <span id="r1Display">4 Ω</span>
+    </div>
+
+    <div class="wire"></div>
+
+    <div class="component">
+      <div class="lamp" id="lamp2">💡</div>
+      <b>R2</b>
+      <span id="r2Display">8 Ω</span>
+    </div>
+
+    <div class="wire"></div>
+
+    <div class="switch">🔘</div>
+  </div>
+
+  <div class="results">
+    <div>
+      <b>Hambatan Total</b>
+      <strong id="totalR">12 Ω</strong>
+    </div>
+
+    <div>
+      <b>Arus Total</b>
+      <strong id="current">0 A</strong>
+    </div>
+
+    <div>
+      <b>Tegangan R1</b>
+      <strong id="v1">0 V</strong>
+    </div>
+
+    <div>
+      <b>Tegangan R2</b>
+      <strong id="v2">0 V</strong>
+    </div>
+  </div>
+
+  <div class="formula">
+    <b>Hukum Ohm</b>
+    <p>I = V / R</p>
+  </div>
+</div>
