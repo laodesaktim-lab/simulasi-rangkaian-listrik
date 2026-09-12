@@ -1,7 +1,63 @@
-<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Media Interaktif Rangkaian Listrik</title><link rel="stylesheet" href="style.css"></head><body>
-<header><div><h1>⚡ Media Interaktif Rangkaian Listrik</h1><p>Susun komponen, hubungkan kabel, dan ubah nilai.</p></div><button onclick="clearBoard()">Bersihkan</button></header>
-<div class="layout">
-<aside><h2>Komponen</h2><p>Tarik ke papan.</p><div class="item" draggable="true" data-t="battery">🔋 Baterai</div><div class="item" draggable="true" data-t="resistor">▱ Resistor</div><div class="item" draggable="true" data-t="lamp">💡 Lampu</div><div class="item" draggable="true" data-t="switch">⏻ Saklar</div><hr><b>Petunjuk</b><ol><li>Tarik komponen.</li><li>Geser untuk menyusun.</li><li>Klik terminal ● lalu terminal lain untuk kabel.</li><li>Klik komponen untuk mengubah nilai.</li><li>Double-click saklar untuk ON/OFF.</li></ol></aside>
-<main><div id="board"><svg id="svg"></svg><div id="empty">Tarik komponen ke sini</div></div><div class="bar"><span id="msg">Belum ada rangkaian.</span><button class="primary" onclick="calculate()">⚡ Hitung</button></div></main>
-<aside><h2>Pengaturan</h2><div id="none">Pilih komponen.</div><div id="form" hidden><b id="title"></b><label>Nama<input id="name"></label><label id="vl">Nilai<input id="value" type="number" step=".1" min=".1"></label><label id="ul">Satuan<select id="unit"><option>V</option><option>Ω</option></select></label><button class="primary" onclick="applyEdit()">Terapkan</button><button class="danger" onclick="deleteSelected()">Hapus</button></div><hr><h2>Hasil</h2><div class="result">Tegangan: <b id="rv">-</b></div><div class="result">Hambatan ekuivalen: <b id="rr">-</b></div><div class="result">Arus total: <b id="ri">-</b></div><div class="result">Jenis: <b id="rt">-</b></div><p id="explain">Tambahkan baterai dan beban.</p></aside>
-</div><script src="script.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Media Interaktif Rangkaian Listrik</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Media Interaktif Rangkaian Listrik</h1>
+  <p>Susun komponen, hubungkan dengan kabel terpisah, dan putuskan kabel untuk membuat rangkaian seri maupun paralel.</p>
+</header>
+
+<div class="toolbar">
+  <button data-add="battery">🔋 Baterai</button>
+  <button data-add="resistor">▱ Resistor</button>
+  <button data-add="lamp">💡 Lampu</button>
+  <button data-add="switch">⏻ Saklar</button>
+  <button id="wireMode">🔌 Buat Kabel</button>
+  <button id="deleteWire">✂️ Putus Kabel</button>
+  <button id="deleteComp">🗑️ Hapus Komponen</button>
+  <button id="clearAll">♻️ Reset</button>
+</div>
+
+<main>
+  <section class="workspace-wrap">
+    <div id="workspace">
+      <svg id="wires" class="wires"></svg>
+      <div id="hint">Tambahkan komponen, lalu klik terminal komponen satu per satu untuk membuat kabel.</div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <h2>Komponen terpilih</h2>
+    <div id="emptyPanel">Belum ada komponen yang dipilih.</div>
+    <div id="editor" hidden>
+      <label>Nama
+        <input id="nameInput">
+      </label>
+      <label>Nilai
+        <input id="valueInput" type="number" step="0.1">
+      </label>
+      <div id="unitLabel">Ω</div>
+      <button id="apply">Terapkan</button>
+      <button id="toggleSwitch" hidden>ON/OFF</button>
+    </div>
+
+    <h2>Petunjuk</h2>
+    <ol>
+      <li>Tambahkan komponen.</li>
+      <li>Seret komponen untuk mengatur posisi.</li>
+      <li>Klik terminal pertama, lalu terminal kedua untuk membuat <b>kabel terpisah</b>.</li>
+      <li>Setiap kabel dapat dipilih dan diputus satu per satu.</li>
+      <li>Untuk paralel, buat dua atau lebih jalur kabel yang menghubungkan node yang sama.</li>
+    </ol>
+    <div id="status" class="status">Status: belum ada rangkaian.</div>
+  </aside>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
