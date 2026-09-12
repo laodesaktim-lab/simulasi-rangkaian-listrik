@@ -1,204 +1,215 @@
-const workspace = document.getElementById("workspace");
-const wiresSvg = document.getElementById("wires");
-const hint = document.getElementById("hint");
-const editor = document.getElementById("editor");
-const emptyPanel = document.getElementById("emptyPanel");
-const nameInput = document.getElementById("nameInput");
-const valueInput = document.getElementById("valueInput");
-const unitLabel = document.getElementById("unitLabel");
-const applyBtn = document.getElementById("apply");
-const toggleSwitchBtn = document.getElementById("toggleSwitch");
-const status = document.getElementById("status");
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
 
-let components = [];
-let wires = [];
-let selectedComponent = null;
-let selectedWire = null;
-let terminalStart = null;
-let wireMode = false;
-let dragging = null;
-let offsetX = 0, offsetY = 0;
-let nextId = 1;
-
-const defaults = {
-  battery:{label:"Baterai", value:12, unit:"V"},
-  resistor:{label:"Resistor", value:6, unit:"Ω"},
-  lamp:{label:"Lampu", value:6, unit:"Ω"},
-  switch:{label:"Saklar", value:1, unit:"", state:true}
+const state = {
+  mode: "series",
+  running: false,
+  selected: null,
+  battery: { id:"battery-1", type:"battery", name:"Baterai", voltage:12, x:90, y:260 },
+  components: [
+    {id:"lamp-1", type:"lamp", name:"R1", resistance:6, x:360, y:270, on:true},
+    {id:"lamp-2", type:"lamp", name:"R2", resistance:6, x:560, y:270, on:true},
+    {id:"lamp-3", type:"lamp", name:"R3", resistance:6, x:760, y:270, on:true}
+  ],
+  wires:[]
 };
 
-document.querySelectorAll("[data-add]").forEach(btn=>{
-  btn.onclick=()=>addComponent(btn.dataset.add);
-});
+const circuit = $("#circuit");
+
+function uid(type){ return type+"-"+Date.now()+"-"+Math.floor(Math.random()*9999); }
+
+function iconFor(type){
+  return {lamp:"💡",resistor:"▱",battery:"🔋",switch:"━╱",voltmeter:"V",ammeter:"A"}[type] || "?";
+}
+function typeName(type){
+  return {lamp:"Lampu",resistor:"Resistor",battery:"Baterai",switch:"Saklar",voltmeter:"Voltmeter",ammeter:"Amperemeter"}[type] || type;
+}
 
 function addComponent(type){
-  const d=defaults[type];
-  const c={id:nextId++,type,name:d.label,value:d.value,unit:d.unit,state:d.state ?? true,x:60+(components.length%5)*150,y:100+Math.floor(components.length/5)*120};
-  components.push(c);
-  renderComponents();
-  selectComponent(c.id);
-  updateHint();
+  if(type==="battery" && state.battery) { toast("Baterai utama sudah tersedia."); return; }
+  const n = state.components.length;
+  const item = {
+    id:uid(type), type, name:type==="lamp" ? `R${n+1}` : typeName(type),
+    resistance:type==="lamp" ? 6 : type==="resistor" ? 10 : undefined,
+    x: 300 + (n%4)*120, y: 160 + Math.floor(n/4)*110,
+    on:true
+  };
+  state.components.push(item);
+  render();
+  select(item);
 }
 
-function renderComponents(){
-  document.querySelectorAll(".component").forEach(e=>e.remove());
-  components.forEach(c=>{
-    const el=document.createElement("div");
-    el.className="component"+(selectedComponent===c.id?" selected":"");
-    el.dataset.id=c.id;
-    el.style.left=c.x+"px"; el.style.top=c.y+"px";
-    el.innerHTML=`
-      <div class="terminal left" data-terminal="${c.id}:L"></div>
-      <div class="terminal right" data-terminal="${c.id}:R"></div>
-      <div class="title">${escapeHtml(c.name)}</div>
-      <div class="value">${c.type==="switch"?(c.state?"ON":"OFF"):(c.value+" "+c.unit)}</div>`;
-    el.addEventListener("pointerdown", startDrag);
-    el.addEventListener("dblclick", ()=>{
-      if(c.type==="switch"){c.state=!c.state;renderComponents();selectComponent(c.id);updateStatus();}
+function render(){
+  circuit.innerHTML="";
+  const all = [state.battery, ...state.components].filter(Boolean);
+  renderWires();
+  all.forEach(renderNode);
+  if(state.mode!=="series") createJunctions();
+  calculate();
+}
+
+function renderNode(item){
+  const el=document.createElement("div");
+  el.className="node"+(state.selected?.id===item.id?" selected":"");
+  el.dataset.id=item.id;
+  el.style.left=item.x+"px"; el.style.top=item.y+"px";
+  let body="";
+  if(item.type==="lamp") body=`<div class="lamp-body ${item.on?"on":""}">💡</div>`;
+  else if(item.type==="resistor") body=`<div class="res-body"></div>`;
+  else if(item.type==="battery") body=`<div class="battery-body"></div>`;
+  else if(item.type==="switch") body=`<div class="switch-body">${item.on?"━╱":"━━"}</div>`;
+  else body=`<div class="meter-body">${item.type==="voltmeter"?"V":"A"}</div>`;
+  el.innerHTML=body+`<div class="label">${item.name}</div>`;
+  el.addEventListener("pointerdown", startDrag);
+  el.addEventListener("click", e=>{e.stopPropagation();select(item)});
+  circuit.appendChild(el);
+}
+
+function renderWires(){
+  const all=[state.battery,...state.components].filter(Boolean);
+  if(all.length<2)return;
+  if(state.mode==="series"){
+    let points=all.map(c=>({x:c.x+38,y:c.y+32}));
+    for(let i=0;i<points.length-1;i++) line(points[i],points[i+1]);
+  } else if(state.mode==="parallel"){
+    const lamps=state.components.filter(c=>["lamp","resistor"].includes(c.type));
+    const battery=state.battery;
+    if(!battery)return;
+    const bx=battery.x+38, by=battery.y+32;
+    const left=bx+100, right=Math.max(...lamps.map(c=>c.x))+40;
+    line({x:bx,y:by},{x:left,y:by});
+    line({x:left,y:by},{x:left,y:Math.min(...lamps.map(c=>c.y))+32});
+    line({x:left,y:Math.max(...lamps.map(c=>c.y))+32},{x:left,y:by});
+    lamps.forEach(c=>{
+      const cy=c.y+32;
+      line({x:left,y:cy},{x:c.x+38,y:cy});
+      line({x:c.x+38,y:cy},{x:right,y:cy});
     });
-    el.addEventListener("click", e=>{
-      if(e.target.classList.contains("terminal")) return;
-      selectComponent(c.id);
-    });
-    el.querySelectorAll(".terminal").forEach(t=>t.addEventListener("click", terminalClick));
-    workspace.appendChild(el);
-  });
-  drawWires();
-}
-
-function startDrag(e){
-  if(e.target.classList.contains("terminal")) return;
-  const c=components.find(x=>x.id===Number(e.currentTarget.dataset.id));
-  if(!c) return;
-  dragging=c;
-  const r=workspace.getBoundingClientRect();
-  offsetX=e.clientX-r.left-c.x; offsetY=e.clientY-r.top-c.y;
-  e.currentTarget.setPointerCapture(e.pointerId);
-  e.currentTarget.classList.add("dragging");
-  selectComponent(c.id);
-}
-workspace.addEventListener("pointermove",e=>{
-  if(!dragging)return;
-  const r=workspace.getBoundingClientRect();
-  dragging.x=Math.max(5,Math.min(workspace.clientWidth-130,e.clientX-r.left-offsetX));
-  dragging.y=Math.max(5,Math.min(workspace.clientHeight-80,e.clientY-r.top-offsetY));
-  const el=document.querySelector(`.component[data-id="${dragging.id}"]`);
-  if(el){el.style.left=dragging.x+"px";el.style.top=dragging.y+"px";}
-  drawWires();
-});
-workspace.addEventListener("pointerup",()=>{if(dragging){document.querySelector(".dragging")?.classList.remove("dragging");dragging=null}});
-
-function terminalClick(e){
-  e.stopPropagation();
-  const key=e.currentTarget.dataset.terminal;
-  if(!wireMode){ wireMode=true; terminalStart=key; status.textContent="Status: terminal pertama dipilih. Pilih terminal kedua."; drawWires(); return; }
-  if(key===terminalStart){return;}
-  const exists=wires.some(w=>(w.a===terminalStart&&w.b===key)||(w.a===key&&w.b===terminalStart));
-  if(!exists) wires.push({id:Date.now()+Math.random(),a:terminalStart,b:key});
-  terminalStart=null;
-  wireMode=false;
-  selectedWire=null;
-  drawWires();
-  updateStatus();
-}
-
-wiresSvg.addEventListener("click",e=>{
-  if(e.target.classList.contains("wire")){
-    selectedWire=Number(e.target.dataset.id);
-    terminalStart=null; wireMode=false;
-    drawWires();
-    status.textContent="Status: kabel dipilih (merah). Klik “Putus Kabel” untuk memutusnya.";
-  }
-});
-
-document.getElementById("wireMode").onclick=()=>{
-  wireMode=true; terminalStart=null; selectedWire=null;
-  status.textContent="Status: mode kabel aktif. Klik terminal pertama lalu terminal kedua.";
-  drawWires();
-};
-
-document.getElementById("deleteWire").onclick=()=>{
-  if(selectedWire==null){status.textContent="Status: pilih kabel terlebih dahulu.";return;}
-  wires=wires.filter(w=>w.id!==selectedWire);
-  selectedWire=null; drawWires(); updateStatus();
-};
-
-document.getElementById("deleteComp").onclick=()=>{
-  if(selectedComponent==null)return;
-  const id=selectedComponent;
-  components=components.filter(c=>c.id!==id);
-  wires=wires.filter(w=>!w.a.startsWith(id+":")&&!w.b.startsWith(id+":"));
-  selectedComponent=null; renderComponents(); updateEditor(); updateStatus();
-};
-
-document.getElementById("clearAll").onclick=()=>{
-  if(confirm("Hapus semua komponen dan kabel?")){
-    components=[];wires=[];selectedComponent=null;selectedWire=null;terminalStart=null;
-    renderComponents();updateEditor();updateStatus();updateHint();
-  }
-};
-
-applyBtn.onclick=()=>{
-  const c=components.find(x=>x.id===selectedComponent);
-  if(!c)return;
-  c.name=nameInput.value||c.name;
-  if(c.type!=="switch") c.value=Number(valueInput.value)||c.value;
-  renderComponents();selectComponent(c.id);updateStatus();
-};
-
-toggleSwitchBtn.onclick=()=>{
-  const c=components.find(x=>x.id===selectedComponent);
-  if(c&&c.type==="switch"){c.state=!c.state;renderComponents();selectComponent(c.id);updateStatus();}
-};
-
-function selectComponent(id){
-  selectedComponent=id; selectedWire=null; renderComponents(); updateEditor();
-}
-
-function updateEditor(){
-  const c=components.find(x=>x.id===selectedComponent);
-  if(!c){emptyPanel.hidden=false;editor.hidden=true;return;}
-  emptyPanel.hidden=true;editor.hidden=false;
-  nameInput.value=c.name;
-  valueInput.value=c.value;
-  unitLabel.textContent=c.type==="battery"?"Volt (V)":(c.type==="switch"?"": "Ohm (Ω)");
-  valueInput.disabled=c.type==="switch";
-  toggleSwitchBtn.hidden=c.type!=="switch";
-  if(c.type==="switch")toggleSwitchBtn.textContent=c.state?"Matikan saklar":"Nyalakan saklar";
-}
-
-function terminalPos(key){
-  const [id,side]=key.split(":");
-  const c=components.find(x=>x.id===Number(id));
-  if(!c)return null;
-  return {x:c.x+(side==="L"?0:125),y:c.y+35};
-}
-function drawWires(){
-  wiresSvg.innerHTML="";
-  wires.forEach(w=>{
-    const a=terminalPos(w.a),b=terminalPos(w.b); if(!a||!b)return;
-    const line=document.createElementNS("http://www.w3.org/2000/svg","line");
-    line.setAttribute("x1",a.x);line.setAttribute("y1",a.y);
-    line.setAttribute("x2",b.x);line.setAttribute("y2",b.y);
-    line.dataset.id=w.id;line.classList.add("wire");
-    if(selectedWire===w.id)line.classList.add("selected");
-    wiresSvg.appendChild(line);
-  });
-  if(terminalStart){
-    const p=terminalPos(terminalStart);
-    if(p){
-      const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
-      c.setAttribute("cx",p.x);c.setAttribute("cy",p.y);c.setAttribute("r",7);c.setAttribute("fill","#e67e22");
-      wiresSvg.appendChild(c);
+    line({x:right,y:Math.min(...lamps.map(c=>c.y))+32},{x:right,y:Math.max(...lamps.map(c=>c.y))+32});
+    line({x:right,y:by},{x:bx,y:by});
+  } else {
+    const lamps=state.components.filter(c=>["lamp","resistor"].includes(c.type));
+    if(lamps.length>=2){
+      line({x:state.battery.x+38,y:state.battery.y+32},{x:lamps[0].x+38,y:lamps[0].y+32});
+      line({x:lamps[0].x+38,y:lamps[0].y+32},{x:lamps[1].x+38,y:lamps[1].y+32});
+      for(let i=1;i<lamps.length-1;i++) line({x:lamps[i].x+38,y:lamps[i].y+32},{x:lamps[i+1].x+38,y:lamps[i+1].y+32});
     }
   }
 }
-
-function updateHint(){hint.style.display=components.length?"none":"block";}
-function updateStatus(){
-  const closed=wires.length>0;
-  status.textContent=`Status: ${components.length} komponen, ${wires.length} kabel terpisah. ${closed?"Kabel dapat dipilih dan diputus satu per satu.":"Belum ada kabel."}`;
+function line(a,b){
+  const el=document.createElement("div"); el.className="wire-line";
+  const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
+  el.style.left=a.x+"px";el.style.top=a.y+"px";el.style.width=len+"px";
+  el.style.transform=`rotate(${Math.atan2(dy,dx)}rad)`;
+  el.addEventListener("click",e=>{e.stopPropagation();el.remove();toast("Kabel dipilih. Klik Hapus untuk menghapus.")});
+  circuit.appendChild(el);
 }
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
+function createJunctions(){
+  const js=document.createElement("div"); js.className="junction";js.style.left="145px";js.style.top="300px";circuit.appendChild(js);
+}
 
-renderComponents();updateEditor();updateHint();updateStatus();
+function select(item){
+  state.selected=item; render();
+  $("#emptySettings").hidden=true; $("#settingsContent").hidden=false;
+  $("#selectedIcon").textContent=iconFor(item.type); $("#selectedName").textContent=typeName(item.type);
+  $("#nameInput").value=item.name;
+  $("#valueLabel").hidden=!["lamp","resistor"].includes(item.type);
+  $("#voltageLabel").hidden=item.type!=="battery";
+  $("#switchRow").hidden=!["lamp","switch"].includes(item.type);
+  if(item.type==="battery")$("#voltageInput").value=item.voltage;
+  if(item.resistance)$("#valueInput").value=item.resistance;
+  updateToggle();
+}
+function updateToggle(){
+  if(!state.selected)return;
+  const on=state.selected.on!==false;
+  $("#switchToggle").classList.toggle("off",!on);
+  $("#switchToggle").classList.toggle("on",on);
+  $("#switchToggle b").textContent=on?"Hidup":"Mati";
+}
+$("#nameInput").addEventListener("input",e=>{if(state.selected){state.selected.name=e.target.value;render()}});
+$("#valueInput").addEventListener("input",e=>{if(state.selected){state.selected.resistance=Math.max(1,Math.min(100,+e.target.value||1));calculate()}});
+$("#voltageInput").addEventListener("input",e=>{if(state.selected){state.selected.voltage=Math.max(1,Math.min(24,+e.target.value||1));calculate()}});
+$("#switchToggle").addEventListener("click",()=>{if(state.selected){state.selected.on=!state.selected.on;updateToggle();render()}});
+$("#closeSettings").addEventListener("click",()=>{state.selected=null;$("#emptySettings").hidden=false;$("#settingsContent").hidden=true;render()});
+
+function calculate(){
+  const V=state.battery?.voltage||12;
+  const loads=state.components.filter(c=>["lamp","resistor"].includes(c.type));
+  let rt=0;
+  if(state.mode==="parallel") rt=loads.length?1/loads.reduce((s,c)=>s+1/(c.resistance||1),0):0;
+  else if(state.mode==="mixed" && loads.length>=3) {
+    const parallel=1/((1/(loads[1].resistance||1))+(1/(loads[2].resistance||1)));
+    rt=(loads[0].resistance||1)+parallel;
+  } else rt=loads.reduce((s,c)=>s+(c.resistance||1),0);
+  const I=rt?V/rt:0;
+  $("#resultVoltage").textContent=`${fmt(V)} V`;
+  $("#resultResistance").textContent=`${fmt(rt)} Ω`;
+  $("#resultCurrent").textContent=`${fmt(I)} A`;
+  const title=$("#branchTitle"), br=$("#branchResults"); br.innerHTML="";
+  if(state.mode==="parallel"){
+    title.textContent="Cabang Paralel";
+    loads.forEach((c,i)=>{const row=document.createElement("div");row.className="branch";row.innerHTML=`<span>${c.name} (${fmt(c.resistance)} Ω)</span><b>${fmt(V/(c.resistance||1))} A</b>`;br.appendChild(row)});
+  } else {
+    title.textContent="Komponen";
+    loads.forEach(c=>{const row=document.createElement("div");row.className="branch";row.innerHTML=`<span>${c.name} (${fmt(c.resistance)} Ω)</span><b>${fmt(I)} A</b>`;br.appendChild(row)});
+  }
+}
+function fmt(n){return Number(n).toFixed(2).replace(/\.00$/,"").replace(/(\.\d)0$/,"$1")}
+
+let drag=null;
+function startDrag(e){
+  const item=[state.battery,...state.components].find(x=>x.id===e.currentTarget.dataset.id);
+  if(!item)return;
+  select(item);
+  drag={item,ox:e.clientX-item.x,oy:e.clientY-item.y};
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+  e.currentTarget.addEventListener("pointermove",moveDrag);
+  e.currentTarget.addEventListener("pointerup",endDrag,{once:true});
+}
+function moveDrag(e){if(!drag)return;drag.item.x=Math.max(10,e.clientX-drag.ox);drag.item.y=Math.max(10,e.clientY-drag.oy);render()}
+function endDrag(){drag=null}
+
+$$(".component").forEach(btn=>btn.addEventListener("click",()=>addComponent(btn.dataset.type)));
+$$(".mode").forEach(btn=>btn.addEventListener("click",()=>{
+  $$(".mode").forEach(b=>b.classList.remove("active"));btn.classList.add("active");
+  state.mode=btn.dataset.mode; arrangeMode(); render(); toast(`Mode ${btn.textContent} aktif.`);
+}));
+function arrangeMode(){
+  if(state.mode==="parallel"){
+    state.battery.x=70;state.battery.y=260;
+    state.components.forEach((c,i)=>{c.x=360+i*160;c.y=180+(i%3)*130});
+  }else if(state.mode==="series"){
+    state.battery.x=70;state.battery.y=260;
+    state.components.forEach((c,i)=>{c.x=310+i*150;c.y=260});
+  }else{
+    state.battery.x=70;state.battery.y=260;
+    state.components.forEach((c,i)=>{c.x=350+i*150;c.y=i===0?260:160+(i%2)*200});
+  }
+}
+$("#runBtn").addEventListener("click",()=>{state.running=true;document.body.classList.add("running");$("#statusText").textContent="Simulasi sedang berjalan.";render();toast("Rangkaian dijalankan.")});
+$("#stopBtn").addEventListener("click",()=>{state.running=false;document.body.classList.remove("running");$("#statusText").textContent="Simulasi dihentikan.";render();toast("Simulasi dihentikan.")});
+$("#resetBtn").addEventListener("click",()=>{
+  state.mode="parallel";state.running=false;state.selected=null;
+  state.battery={id:"battery-1",type:"battery",name:"Baterai",voltage:12,x:70,y:260};
+  state.components=[
+    {id:"lamp-1",type:"lamp",name:"R1",resistance:6,x:360,y:180,on:true},
+    {id:"lamp-2",type:"lamp",name:"R2",resistance:6,x:520,y:310,on:true},
+    {id:"lamp-3",type:"lamp",name:"R3",resistance:6,x:680,y:440,on:true}
+  ];
+  $$(".mode").forEach(b=>b.classList.toggle("active",b.dataset.mode==="parallel"));
+  $("#emptySettings").hidden=false;$("#settingsContent").hidden=true;document.body.classList.remove("running");render();toast("Rangkaian direset.");
+});
+$("#deleteBtn").addEventListener("click",()=>{
+  if(!state.selected){toast("Pilih komponen terlebih dahulu.");return}
+  if(state.selected.type==="battery"){toast("Baterai utama tidak dapat dihapus.");return}
+  const id=state.selected.id;state.components=state.components.filter(c=>c.id!==id);state.selected=null;
+  $("#emptySettings").hidden=false;$("#settingsContent").hidden=true;render();toast("Komponen dihapus.");
+});
+$("#settingsBtn").addEventListener("click",()=>{$(".settings-panel").scrollIntoView({behavior:"smooth"})});
+circuit.addEventListener("click",()=>{state.selected=null;$("#emptySettings").hidden=false;$("#settingsContent").hidden=true;render()});
+
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove("show"),1700)}
+
+arrangeMode();
+render();

@@ -1,158 +1,130 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simulasi Rangkaian Listrik</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f4f7fb;color:#12233d}
-.top{height:80px;background:linear-gradient(90deg,#193553,#12243a);color:white;display:flex;align-items:center;padding:0 28px;gap:18px}
-.logo{font-size:42px}.title h1{margin:0;font-size:23px}.title p{margin:5px 0 0;color:#d7e3ef;font-size:14px}
-.modes{margin-left:auto;display:flex;background:#30465e;border-radius:10px;overflow:hidden}
-.mode{padding:14px 25px;border:0;background:transparent;color:white;font-size:16px;cursor:pointer}
-.mode.active{background:#3194ed}
-.actions{display:flex;gap:25px;margin-left:25px}
-.action{border:0;background:transparent;color:white;cursor:pointer;font-size:13px}
-.action span{display:block;font-size:25px;margin-bottom:3px}
-
-.main{display:grid;grid-template-columns:250px 1fr 330px;gap:14px;padding:20px 0}
-.panel,.canvas{background:white;border:1px solid #ccd7e3;border-radius:10px;box-shadow:0 1px 3px #00000010}
-.panel h2{font-size:19px;margin:0;padding:16px 20px;border-bottom:1px solid #dce4ec}
-.components{padding:8px}
-.comp{display:flex;align-items:center;gap:14px;padding:14px 12px;border-bottom:1px solid #e4e9ef;cursor:pointer}
-.comp:hover{background:#f2f7fc}.icon{width:76px;height:55px;display:grid;place-items:center;font-size:40px}
-.comp b{font-size:16px}.comp small{display:block;color:#657487;margin-top:5px}
-.canvas{position:relative;min-height:690px;overflow:hidden;background-image:linear-gradient(#e8edf3 1px,transparent 1px),linear-gradient(90deg,#e8edf3 1px,transparent 1px);background-size:38px 38px}
-.board{position:absolute;inset:0}
-.node{position:absolute;width:13px;height:13px;background:#163b62;border:2px solid #071e36;border-radius:50%;z-index:5;transform:translate(-50%,-50%)}
-.wire{position:absolute;height:5px;background:#e11d16;border-radius:5px;transform-origin:left center;z-index:2;cursor:pointer;transition:.15s}
-.wire.black{background:#171717}.wire:hover{box-shadow:0 0 0 4px #ffcc0033}
-.wire.cut{background:transparent;border-top:5px dashed #e11d16}
-.wire.black.cut{border-top-color:#171717}
-.wire::after{content:"";position:absolute;inset:-10px 0;cursor:pointer}
-.battery{position:absolute;left:10%;top:47%;width:78px;height:88px;border:3px solid #333;border-radius:10px;background:linear-gradient(90deg,#333 0 48%,#f7941d 48%);z-index:4}
-.battery:after{content:"+";position:absolute;right:14px;top:24px;font-size:26px;font-weight:bold;color:#111}
-.battery:before{content:"";position:absolute;left:10px;top:-9px;width:13px;height:8px;background:#333;border-radius:3px;box-shadow:55px 0 #333}
-.bvolt{position:absolute;left:10%;top:60%;font-weight:bold;font-size:18px}
-.lamp{position:absolute;width:65px;height:65px;border-radius:50%;z-index:4;display:grid;place-items:center;font-size:45px;filter:drop-shadow(0 0 5px #ffd83d)}
-.lamp.on{filter:drop-shadow(0 0 18px #ffd83d)}
-.rlabel{position:absolute;font-weight:bold;font-size:17px;z-index:5}
-.right{display:flex;flex-direction:column;gap:14px;padding-right:0}.box{background:white;border:1px solid #ccd7e3;border-radius:10px;padding:0 16px 16px}.box h2{font-size:18px;margin:0 -16px 12px;padding:16px;border-bottom:1px solid #dce4ec}
-.field{display:flex;justify-content:space-between;align-items:center;margin:12px 0}.field input{width:145px;padding:9px;border:1px solid #ccd7e3;border-radius:8px;font-size:16px}
-.switch{width:48px;height:27px;border-radius:20px;background:#16a66a;display:inline-block;padding:3px}.switch i{display:block;width:21px;height:21px;background:white;border-radius:50%;margin-left:20px}
-.result{background:#edf6ff;padding:12px;border-radius:8px;line-height:2}
-.controls{display:flex;gap:12px}.btn{flex:1;padding:13px;border:1px solid #ccd7e3;border-radius:8px;background:white;font-size:15px;cursor:pointer}.run{background:#16b768;color:white;border:0}
-.help{position:absolute;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ccd7e3;display:flex;justify-content:space-around;padding:15px;font-size:14px;color:#40526a}
-@media(max-width:1000px){.main{grid-template-columns:1fr}.right{padding:0 14px}.panel{display:none}.canvas{margin:0 14px}.top{height:auto;padding:14px;flex-wrap:wrap}.modes{margin-left:0}.actions{margin-left:0}}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulasi Rangkaian Listrik</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<header class="top">
-  <div class="logo">⚡</div>
-  <div class="title"><h1>Simulasi Rangkaian Listrik</h1><p>Susun, hubungkan, dan amati rangkaian listrik sesuai keinginanmu!</p></div>
-  <div class="modes">
-    <button class="mode active">Seri</button><button class="mode">Paralel</button><button class="mode">Campuran</button>
-  </div>
-  <div class="actions">
-    <button class="action" onclick="clearCuts()"><span>🗑</span>Hapus</button>
-    <button class="action" onclick="resetAll()"><span>↻</span>Reset</button>
-    <button class="action"><span>⚙</span>Pengaturan</button>
-  </div>
-</header>
-
-<div class="main">
-  <aside class="panel">
-    <h2>Komponen</h2>
-    <div class="components">
-      <div class="comp"><div class="icon">🔋</div><div><b>Baterai</b><small>(1 – 24 V)</small></div></div>
-      <div class="comp"><div class="icon">〰️</div><div><b>Resistor</b><small>(1 – 100 Ω)</small></div></div>
-      <div class="comp"><div class="icon">💡</div><div><b>Lampu</b><small>(1 – 100 Ω)</small></div></div>
-      <div class="comp"><div class="icon">🔘</div><div><b>Saklar</b><small>(ON / OFF)</small></div></div>
-      <div class="comp"><div class="icon">📟</div><div><b>Voltmeter</b><small>(V)</small></div></div>
-      <div class="comp"><div class="icon">📟</div><div><b>Amperemeter</b><small>(A)</small></div></div>
-      <div class="comp"><div class="icon">━</div><div><b>Kabel</b><small>(Satu per satu)</small></div></div>
-      <div class="comp"><div class="icon">🔵</div><div><b>Titik Percabangan</b><small>(Otomatis)</small></div></div>
-    </div>
-  </aside>
-
-  <section class="canvas" id="canvas">
-    <div class="board">
-      <!-- Wires: klik setiap kabel untuk memutus / menyambungkan kembali -->
-      <div class="wire" data-wire="top" style="left:13%;top:35%;width:70%;"></div>
-      <div class="wire black" data-wire="bottom" style="left:13%;top:75%;width:70%;"></div>
-      <div class="wire" data-wire="lefttop" style="left:13%;top:35%;width:12%;transform:rotate(90deg);"></div>
-      <div class="wire black" data-wire="leftbottom" style="left:13%;top:75%;width:10%;transform:rotate(-90deg);"></div>
-      <div class="wire" data-wire="r1top" style="left:36%;top:35%;width:14%;transform:rotate(90deg);"></div>
-      <div class="wire black" data-wire="r1bottom" style="left:36%;top:75%;width:14%;transform:rotate(-90deg);"></div>
-      <div class="wire" data-wire="r2top" style="left:57%;top:35%;width:14%;transform:rotate(90deg);"></div>
-      <div class="wire black" data-wire="r2bottom" style="left:57%;top:75%;width:14%;transform:rotate(-90deg);"></div>
-      <div class="wire" data-wire="r3top" style="left:78%;top:35%;width:14%;transform:rotate(90deg);"></div>
-      <div class="wire black" data-wire="r3bottom" style="left:78%;top:75%;width:14%;transform:rotate(-90deg);"></div>
-
-      <div class="battery"></div><div class="bvolt">12 V</div>
-      <div class="lamp on" style="left:32%;top:31%">💡</div><div class="rlabel" style="left:38%;top:49%">R1<br>6 Ω</div>
-      <div class="lamp on" style="left:53%;top:31%">💡</div><div class="rlabel" style="left:59%;top:49%">R2<br>6 Ω</div>
-      <div class="lamp on" style="left:74%;top:31%">💡</div><div class="rlabel" style="left:80%;top:49%">R3<br>6 Ω</div>
-
-      <span class="node" style="left:36%;top:35%"></span><span class="node" style="left:57%;top:35%"></span><span class="node" style="left:78%;top:35%"></span>
-      <span class="node" style="left:36%;top:75%"></span><span class="node" style="left:57%;top:75%"></span><span class="node" style="left:78%;top:75%"></span>
-    </div>
-    <div class="help"><span>☝️ Geser komponen</span><span>🔗 Buat kabel satu per satu</span><span>🔵 Gunakan titik percabangan untuk rangkaian paralel</span><span>🗑 Klik kabel/komponen untuk menghapus</span><span>💡 Eksplorasi, buat rangkaian sesuai kreativitasmu!</span></div>
-  </section>
-
-  <aside class="right">
-    <div class="box">
-      <h2>Pengaturan Komponen</h2>
-      <div class="field"><b>💡 Lampu</b><b>×</b></div>
-      <div class="field">Hambatan (Ω)<input id="r" type="number" min="1" max="100" value="6" oninput="calc()"></div>
-      <div class="field">Status <span class="switch"><i></i></span> Hidup</div>
-    </div>
-    <div class="box">
-      <h2>Hasil Perhitungan</h2>
-      <div class="result">
-        Tegangan (V) : <b id="vout">12 V</b><br>
-        Hambatan Total (Rₜ) : <b id="rt">2 Ω</b><br>
-        Arus Total (I) : <b id="it">6 A</b>
-        <hr>
-        <b>Cabang Paralel</b><br>
-        R1 (6 Ω) : <b id="i1">2 A</b><br>
-        R2 (6 Ω) : <b id="i2">2 A</b><br>
-        R3 (6 Ω) : <b id="i3">2 A</b>
+  <header class="topbar">
+    <div class="brand">
+      <div class="bolt">ϟ</div>
+      <div>
+        <h1>Simulasi Rangkaian Listrik</h1>
+        <p>Susun, hubungkan, dan amati rangkaian listrik sesuai keinginanmu!</p>
       </div>
     </div>
-    <div class="box">
-      <h2>Kontrol</h2>
-      <div class="controls"><button class="btn run" onclick="run()">▶ Jalankan</button><button class="btn" onclick="stop()">■ Berhenti</button></div>
-      <p id="status">Simulasi berjalan.</p>
+    <nav class="mode-tabs" aria-label="Mode rangkaian">
+      <button class="mode active" data-mode="series">Seri</button>
+      <button class="mode" data-mode="parallel">Paralel</button>
+      <button class="mode" data-mode="mixed">Campuran</button>
+    </nav>
+    <div class="top-actions">
+      <button id="deleteBtn" class="icon-action">♜<span>Hapus</span></button>
+      <button id="resetBtn" class="icon-action">↻<span>Reset</span></button>
+      <button id="settingsBtn" class="icon-action">⚙<span>Pengaturan</span></button>
     </div>
-  </aside>
-</div>
+  </header>
 
-<script>
-const wires=[...document.querySelectorAll('.wire')];
-wires.forEach(w=>w.addEventListener('click',e=>{
-  e.stopPropagation();
-  w.classList.toggle('cut');
-  updateCircuit();
-}));
-function updateCircuit(){
-  const cuts=document.querySelectorAll('.wire.cut').length;
-  document.querySelectorAll('.lamp').forEach(l=>l.classList.toggle('on',cuts===0));
-  document.getElementById('status').textContent=cuts?`${cuts} kabel terputus — rangkaian berubah.`:'Semua kabel tersambung — simulasi berjalan.';
-}
-function clearCuts(){wires.forEach(w=>w.classList.add('cut'));updateCircuit()}
-function resetAll(){wires.forEach(w=>w.classList.remove('cut'));document.getElementById('r').value=6;calc();updateCircuit()}
-function calc(){
-  const r=Number(document.getElementById('r').value)||6, v=12;
-  const rt=r/3, it=v/rt, ib=v/r;
-  document.getElementById('rt').textContent=rt.toFixed(2)+' Ω';
-  document.getElementById('it').textContent=it.toFixed(2)+' A';
-  ['i1','i2','i3'].forEach(x=>document.getElementById(x).textContent=ib.toFixed(2)+' A');
-}
-function run(){document.getElementById('status').textContent='Simulasi berjalan.'}
-function stop(){document.getElementById('status').textContent='Simulasi dihentikan.';document.querySelectorAll('.lamp').forEach(l=>l.classList.remove('on'))}
-calc();
-</script>
+  <main class="app">
+    <aside class="sidebar">
+      <h2>Komponen</h2>
+      <div class="component-list">
+        <button class="component" data-type="battery">
+          <span class="component-icon battery-icon">＋</span>
+          <span><b>Baterai</b><small>(1 – 24 V)</small></span>
+        </button>
+        <button class="component" data-type="resistor">
+          <span class="component-icon resistor-icon">▱</span>
+          <span><b>Resistor</b><small>(1 – 100 Ω)</small></span>
+        </button>
+        <button class="component" data-type="lamp">
+          <span class="component-icon lamp-icon">💡</span>
+          <span><b>Lampu</b><small>(1 – 100 Ω)</small></span>
+        </button>
+        <button class="component" data-type="switch">
+          <span class="component-icon switch-icon">━╱</span>
+          <span><b>Saklar</b><small>(ON / OFF)</small></span>
+        </button>
+        <button class="component" data-type="voltmeter">
+          <span class="component-icon meter-icon">V</span>
+          <span><b>Voltmeter</b><small>(V)</small></span>
+        </button>
+        <button class="component" data-type="ammeter">
+          <span class="component-icon meter-icon green">A</span>
+          <span><b>Amperemeter</b><small>(A)</small></span>
+        </button>
+      </div>
+      <div class="cable-preview">
+        <div class="wire red"></div><div class="wire black"></div>
+        <span><b>Kabel</b><small>(Satu per satu)</small></span>
+      </div>
+      <div class="junction-preview">
+        <span class="dot"></span>
+        <span><b>Titik Percabangan</b><small>(Otomatis)</small></span>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div id="circuit" class="circuit" aria-label="Area rangkaian"></div>
+      <div class="workspace-help">
+        <span>☝</span> Geser komponen
+        <span>⌁</span> Buat kabel satu per satu
+        <span>●</span> Gunakan titik percabangan untuk rangkaian paralel
+        <span>♜</span> Klik kabel/komponen untuk menghapus
+      </div>
+    </section>
+
+    <aside class="rightbar">
+      <section class="panel settings-panel">
+        <h2>Pengaturan Komponen</h2>
+        <div id="emptySettings" class="empty">Pilih komponen untuk mengatur nilainya.</div>
+        <div id="settingsContent" hidden>
+          <div class="selected-title">
+            <div id="selectedIcon" class="selected-icon">💡</div>
+            <h3 id="selectedName">Lampu</h3>
+            <button id="closeSettings" aria-label="Tutup">×</button>
+          </div>
+          <label>Nama
+            <input id="nameInput" type="text" />
+          </label>
+          <label id="valueLabel">Hambatan (Ω)
+            <input id="valueInput" type="number" min="1" max="100" step="1" />
+          </label>
+          <label id="voltageLabel" hidden>Tegangan (V)
+            <input id="voltageInput" type="number" min="1" max="24" step="1" />
+          </label>
+          <label id="switchRow" hidden class="switch-row">Status
+            <button id="switchToggle" class="toggle on"><span></span><b>Hidup</b></button>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel result-panel">
+        <h2>Hasil Perhitungan</h2>
+        <div class="results">
+          <div><span>Tegangan (V)</span><b id="resultVoltage">12 V</b></div>
+          <div><span>Hambatan Total (Rₜ)</span><b id="resultResistance">2 Ω</b></div>
+          <div><span>Arus Total (I)</span><b id="resultCurrent">6 A</b></div>
+          <hr />
+          <h3 id="branchTitle">Cabang Paralel</h3>
+          <div id="branchResults"></div>
+        </div>
+      </section>
+
+      <section class="panel control-panel">
+        <h2>Kontrol</h2>
+        <div class="controls">
+          <button id="runBtn" class="run">▶&nbsp; Jalankan</button>
+          <button id="stopBtn" class="stop">■&nbsp; Berhenti</button>
+        </div>
+        <p id="statusText">Simulasi siap dijalankan.</p>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="script.js"></script>
 </body>
 </html>
