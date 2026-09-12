@@ -1,7 +1,77 @@
-<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Media Interaktif Rangkaian Listrik</title><link rel="stylesheet" href="style.css"></head><body>
-<header><div><h1>⚡ Media Interaktif Rangkaian Listrik</h1><p>Susun komponen, hubungkan kabel, dan ubah nilai.</p></div><button onclick="clearBoard()">Bersihkan</button></header>
-<div class="layout">
-<aside><h2>Komponen</h2><p>Tarik ke papan.</p><div class="item" draggable="true" data-t="battery">🔋 Baterai</div><div class="item" draggable="true" data-t="resistor">▱ Resistor</div><div class="item" draggable="true" data-t="lamp">💡 Lampu</div><div class="item" draggable="true" data-t="switch">⏻ Saklar</div><hr><b>Petunjuk</b><ol><li>Tarik komponen.</li><li>Geser untuk menyusun.</li><li>Klik terminal ● lalu terminal lain untuk kabel.</li><li>Klik komponen untuk mengubah nilai.</li><li>Double-click saklar untuk ON/OFF.</li></ol></aside>
-<main><div id="board"><svg id="svg"></svg><div id="empty">Tarik komponen ke sini</div></div><div class="bar"><span id="msg">Belum ada rangkaian.</span><button class="primary" onclick="calculate()">⚡ Hitung</button></div></main>
-<aside><h2>Pengaturan</h2><div id="none">Pilih komponen.</div><div id="form" hidden><b id="title"></b><label>Nama<input id="name"></label><label id="vl">Nilai<input id="value" type="number" step=".1" min=".1"></label><label id="ul">Satuan<select id="unit"><option>V</option><option>Ω</option></select></label><button class="primary" onclick="applyEdit()">Terapkan</button><button class="danger" onclick="deleteSelected()">Hapus</button></div><hr><h2>Hasil</h2><div class="result">Tegangan: <b id="rv">-</b></div><div class="result">Hambatan ekuivalen: <b id="rr">-</b></div><div class="result">Arus total: <b id="ri">-</b></div><div class="result">Jenis: <b id="rt">-</b></div><p id="explain">Tambahkan baterai dan beban.</p></aside>
-</div><script src="script.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulasi Rangkaian Listrik Interaktif</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Simulasi Rangkaian Listrik</h1>
+      <p>Atur tegangan dan hambatan, lalu tekan tombol sakelar untuk melihat perubahan arus.</p>
+    </header>
+
+    <section class="controls">
+      <label>Tegangan (V)
+        <input id="voltage" type="range" min="1" max="24" value="12">
+        <span id="voltageValue">12 V</span>
+      </label>
+
+      <label>Hambatan (Ω)
+        <input id="resistance" type="range" min="1" max="100" value="10">
+        <span id="resistanceValue">10 Ω</span>
+      </label>
+
+      <button id="switchBtn" class="switch off">SAKELAR: OFF</button>
+      <button id="resetBtn" class="reset">Reset</button>
+    </section>
+
+    <section class="simulation">
+      <svg id="circuit" viewBox="0 0 900 430" role="img" aria-label="Rangkaian listrik interaktif">
+        <path class="wire" d="M150 100 H750 V330 H150 Z"></path>
+
+        <!-- Battery -->
+        <line class="battery long" x1="180" y1="70" x2="180" y2="130"></line>
+        <line class="battery short" x1="205" y1="82" x2="205" y2="118"></line>
+        <text x="155" y="50">Baterai</text>
+        <text id="batteryText" x="170" y="155">12 V</text>
+
+        <!-- Switch -->
+        <circle cx="450" cy="100" r="8" class="terminal"></circle>
+        <circle cx="510" cy="100" r="8" class="terminal"></circle>
+        <line id="switchArm" class="switchArm" x1="450" y1="100" x2="480" y2="72"></line>
+        <text x="455" y="55">Sakelar</text>
+
+        <!-- Resistor -->
+        <polyline class="resistor" points="720,100 735,85 750,115 765,85 780,115 795,85 810,115 825,100"></polyline>
+        <text x="745" y="145">Resistor</text>
+        <text id="resistanceText" x="755" y="165">10 Ω</text>
+
+        <!-- Lamp -->
+        <circle id="lamp" class="lamp" cx="450" cy="330" r="30"></circle>
+        <line x1="430" y1="310" x2="470" y2="350" class="lampCross"></line>
+        <line x1="470" y1="310" x2="430" y2="350" class="lampCross"></line>
+        <text x="425" y="385">Lampu</text>
+
+        <!-- Current particles -->
+        <g id="particles"></g>
+      </svg>
+    </section>
+
+    <section class="results">
+      <div><strong>Arus:</strong> <span id="current">0.00 A</span></div>
+      <div><strong>Daya:</strong> <span id="power">0.00 W</span></div>
+      <div><strong>Status:</strong> <span id="status">Sirkuit terbuka</span></div>
+    </section>
+
+    <section class="explanation">
+      <h2>Rumus</h2>
+      <p><b>Hukum Ohm:</b> I = V / R</p>
+      <p><b>Daya listrik:</b> P = V × I</p>
+    </section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
