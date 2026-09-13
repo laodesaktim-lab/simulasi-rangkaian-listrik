@@ -1,72 +1,7 @@
-<!doctype html>
-<html lang="id">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Media Interaktif Rangkaian Listrik</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<header class="top">
-  <div class="brand"><div class="bolt">⚡</div><div><h1>Simulasi Rangkaian Listrik</h1><p>Susun, hubungkan, dan ubah nilai komponen sesuai keinginanmu!</p></div></div>
-  <div class="top-actions">
-    <button class="mode active" data-mode="seri">Seri</button>
-    <button class="mode" data-mode="paralel">Paralel</button>
-    <button class="mode" data-mode="gabungan">Gabungan</button>
-    <button id="saveBtn">💾 Simpan</button>
-    <button id="resetBtn">↻ Reset</button>
-  </div>
-</header>
-
-<div class="app">
-<aside class="palette">
-  <h2>Komponen</h2>
-  <div class="drag-note">Klik tombol untuk menambahkan komponen.</div>
-  <button class="item" data-type="battery"><span>🔋</span><b>Baterai</b><small>1–24 V</small></button>
-  <button class="item" data-type="resistor"><span>▱</span><b>Resistor</b><small>1–100 Ω</small></button>
-  <button class="item" data-type="lamp"><span>💡</span><b>Lampu</b><small>1–100 Ω</small></button>
-  <button class="item" data-type="switch"><span>⏻</span><b>Saklar</b><small>ON / OFF</small></button>
-  <button class="item" data-type="voltmeter"><span>Ⓥ</span><b>Voltmeter</b><small>V</small></button>
-  <button class="item" data-type="ammeter"><span>Ⓐ</span><b>Amperemeter</b><small>A</small></button>
-  <button class="item" id="wireModeBtn"><span>🔌</span><b>Sambung Kabel</b><small>Klik terminal satu per satu</small></button>
-  <button class="item" id="junctionBtn"><span>●</span><b>Titik Percabangan</b><small>Bisa dipindahkan</small></button>
-  <button class="clear" id="clearBtn">🗑 Hapus Semua</button>
-</aside>
-
-<main class="center">
-  <div id="board">
-    <svg id="wireLayer"></svg>
-    <div id="empty">Tambahkan komponen, kemudian sambungkan terminal-terminalnya.</div>
-    <div id="message"></div>
-  </div>
-  <div class="bottom-tools">
-    <button id="selectTool" class="active">↖ <b>Pilih / Pindah</b><small>Geser komponen atau titik cabang</small></button>
-    <button id="connectTool">🔗 <b>Sambung Kabel</b><small>Klik terminal → terminal</small></button>
-    <button id="cutTool">✂ <b>Putus Kabel</b><small>Klik kabel untuk memilih</small></button>
-    <button id="deleteTool">🗑 <b>Hapus Komponen</b><small>Klik komponen yang akan dihapus</small></button>
-  </div>
-</main>
-
-<aside class="right">
-  <section class="card">
-    <h2>Pengaturan Komponen</h2>
-    <div id="nonePanel">Pilih komponen di papan.</div>
-    <div id="editor" hidden></div>
-  </section>
-  <section class="card">
-    <h2>Pengaturan Baterai</h2>
-    <label>Tegangan (V)<input id="batteryInput" type="number" min="1" max="24" step="0.1" value="12"></label>
-  </section>
-  <section class="card">
-    <h2>Hasil Perhitungan</h2>
-    <div id="results">Rangkaian belum tertutup.</div>
-  </section>
-  <section class="card actions">
-    <button id="runBtn" class="run">▶ Jalankan</button>
-    <button id="stopBtn">■ Berhenti</button>
-  </section>
-</aside>
-</div>
-<script src="script.js"></script>
-</body>
-</html>
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Media Interaktif Rangkaian Listrik</title><link rel="stylesheet" href="style.css"></head><body>
+<header><div><h1>⚡ Media Interaktif Rangkaian Listrik</h1><p>Susun komponen, hubungkan kabel, dan ubah nilai.</p></div><button onclick="clearBoard()">Bersihkan</button></header>
+<div class="layout">
+<aside><h2>Komponen</h2><p>Tarik ke papan.</p><div class="item" draggable="true" data-t="battery">🔋 Baterai</div><div class="item" draggable="true" data-t="resistor">▱ Resistor</div><div class="item" draggable="true" data-t="lamp">💡 Lampu</div><div class="item" draggable="true" data-t="switch">⏻ Saklar</div><hr><b>Petunjuk</b><ol><li>Tarik komponen.</li><li>Geser untuk menyusun.</li><li>Klik terminal ● lalu terminal lain untuk kabel.</li><li>Klik komponen untuk mengubah nilai.</li><li>Double-click saklar untuk ON/OFF.</li></ol></aside>
+<main><div id="board"><svg id="svg"></svg><div id="empty">Tarik komponen ke sini</div></div><div class="bar"><span id="msg">Belum ada rangkaian.</span><button class="primary" onclick="calculate()">⚡ Hitung</button></div></main>
+<aside><h2>Pengaturan</h2><div id="none">Pilih komponen.</div><div id="form" hidden><b id="title"></b><label>Nama<input id="name"></label><label id="vl">Nilai<input id="value" type="number" step=".1" min=".1"></label><label id="ul">Satuan<select id="unit"><option>V</option><option>Ω</option></select></label><button class="primary" onclick="applyEdit()">Terapkan</button><button class="danger" onclick="deleteSelected()">Hapus</button></div><hr><h2>Hasil</h2><div class="result">Tegangan: <b id="rv">-</b></div><div class="result">Hambatan ekuivalen: <b id="rr">-</b></div><div class="result">Arus total: <b id="ri">-</b></div><div class="result">Jenis: <b id="rt">-</b></div><p id="explain">Tambahkan baterai dan beban.</p></aside>
+</div><script src="script.js"></script></body></html>
