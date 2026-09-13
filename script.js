@@ -75,8 +75,28 @@ function render(){
  });
  junctions.forEach(j=>{
    const el=document.createElement('div');el.className='junction';el.style.left=j.x+'px';el.style.top=j.y+'px';
-   el.title='Titik percabangan';el.dataset.key=j.id+':J';
-   el.addEventListener('click',e=>{e.stopPropagation();if(tool==='connect'){if(!firstTerminal)firstTerminal=j.id+':J';else{addWire(firstTerminal,j.id+':J');firstTerminal=null;calculate()}render()}else if(tool==='delete'){junctions=junctions.filter(x=>x.id!==j.id);removeWiresFor(j.id);render();calculate()}});
+   el.title='Titik percabangan — seret untuk memindahkan';el.dataset.key=j.id+':J';
+   el.addEventListener('pointerdown',e=>{
+     e.stopPropagation();
+     if(tool==='select'){
+       const r=canvas.getBoundingClientRect();
+       drag={junction:j,ox:e.clientX-r.left-j.x,oy:e.clientY-r.top-j.y};
+       el.setPointerCapture?.(e.pointerId);
+       return;
+     }
+   });
+   el.addEventListener('click',e=>{
+     e.stopPropagation();
+     if(tool==='connect'){
+       if(!firstTerminal)firstTerminal=j.id+':J';
+       else{addWire(firstTerminal,j.id+':J');firstTerminal=null;calculate()}
+       render();
+     }else if(tool==='delete'){
+       junctions=junctions.filter(x=>x.id!==j.id);
+       wires=wires.filter(w=>w.a!==j.id+':J'&&w.b!==j.id+':J');
+       render();calculate();
+     }
+   });
    canvas.appendChild(el);
  });
  drawWires();
@@ -92,11 +112,17 @@ function startDrag(e,c){
 canvas.addEventListener('pointermove',e=>{
  if(!drag)return;
  const r=canvas.getBoundingClientRect();
- drag.c.x=Math.max(3,Math.min(canvas.clientWidth-125,e.clientX-r.left-drag.ox));
- drag.c.y=Math.max(3,Math.min(canvas.clientHeight-93,e.clientY-r.top-drag.oy));
+ if(drag.c){
+   drag.c.x=Math.max(3,Math.min(canvas.clientWidth-125,e.clientX-r.left-drag.ox));
+   drag.c.y=Math.max(3,Math.min(canvas.clientHeight-93,e.clientY-r.top-drag.oy));
+ }else if(drag.junction){
+   drag.junction.x=Math.max(8,Math.min(canvas.clientWidth-8,e.clientX-r.left-drag.ox));
+   drag.junction.y=Math.max(8,Math.min(canvas.clientHeight-8,e.clientY-r.top-drag.oy));
+ }
  render();
 });
 canvas.addEventListener('pointerup',()=>drag=null);
+canvas.addEventListener('pointercancel',()=>drag=null);
 function drawWires(){
  wireLayer.innerHTML='';
  wires.forEach(w=>{
