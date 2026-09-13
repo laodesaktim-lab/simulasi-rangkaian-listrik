@@ -1,234 +1,279 @@
-/* Simulasi Rangkaian Listrik - versi revisi
-   Solver DC menggunakan Modified Nodal Analysis untuk jaringan resistor/lampu
-   dengan satu baterai. Kabel adalah objek individual dan dapat diputus. */
-const canvas=document.getElementById('canvas'), wireLayer=document.getElementById('wireLayer');
-const editor=document.getElementById('componentEditor'), results=document.getElementById('results');
-let comps=[], wires=[], junctions=[], selectedId=null, selectedWireId=null, tool='select', firstTerminal=null, running=false, nextId=1, drag=null;
-const DEF={battery:{name:'Baterai',value:12,unit:'V',icon:'🔋'},resistor:{name:'Resistor',value:6,unit:'Ω',icon:'▰'},lamp:{name:'Lampu',value:6,unit:'Ω',icon:'💡'},switch:{name:'Saklar',value:1,unit:'',icon:'⏻'},voltmeter:{name:'Voltmeter',value:0,unit:'V',icon:'V'},ammeter:{name:'Amperemeter',value:0,unit:'A',icon:'A'}};
+const B=document.getElementById("board"),SVG=document.getElementById("wireLayer");
+let components=[],wires=[],junctions=[],selected=null,selectedJunction=null,selectedWire=null,tool="select",startTerminal=null,drag=null,nextId=1,running=false;
 
-document.querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',()=>addComponent(b.dataset.add)));
-document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.mode').forEach(x=>x.classList.remove('active'));b.classList.add('active');calculate()}));
-document.getElementById('wirePalette').onclick=()=>setTool('connect');
-document.getElementById('junctionPalette').onclick=addJunction;
-document.getElementById('selectTool').onclick=()=>setTool('select');
-document.getElementById('connectTool').onclick=()=>setTool('connect');
-document.getElementById('cutTool').onclick=()=>setTool('cut');
-document.getElementById('deleteTool').onclick=()=>setTool('delete');
-document.getElementById('clearBtn').onclick=clearAll;
-document.getElementById('resetBtn').onclick=clearAll;
-document.getElementById('runBtn').onclick=()=>{running=true;calculate()};
-document.getElementById('stopBtn').onclick=()=>{running=false;calculate()};
-document.getElementById('saveBtn').onclick=()=>{localStorage.setItem('rangkaianListrikRevisi',JSON.stringify({comps,wires,junctions}));toast('Rangkaian tersimpan di browser.')};
-document.getElementById('batteryVoltage').oninput=()=>{const b=comps.find(c=>c.type==='battery');if(b){b.value=Math.max(0.1,Number(document.getElementById('batteryVoltage').value)||12);render();calculate()}};
+const defaults={
+ battery:{icon:"🔋",name:"Baterai",value:12,unit:"V"},
+ resistor:{icon:"▱",name:"Resistor",value:6,unit:"Ω"},
+ lamp:{icon:"💡",name:"Lampu",value:6,unit:"Ω"},
+ switch:{icon:"⏻",name:"Saklar",value:1,unit:"",state:true},
+ voltmeter:{icon:"Ⓥ",name:"Voltmeter",value:0,unit:"V"},
+ ammeter:{icon:"Ⓐ",name:"Amperemeter",value:0,unit:"A"}
+};
+
+document.querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>addComponent(b.dataset.type));
+document.getElementById("wireModeBtn").onclick=()=>setTool("connect");
+document.getElementById("junctionBtn").onclick=addJunction;
+document.getElementById("selectTool").onclick=()=>setTool("select");
+document.getElementById("connectTool").onclick=()=>setTool("connect");
+document.getElementById("cutTool").onclick=()=>setTool("cut");
+document.getElementById("deleteTool").onclick=()=>setTool("delete");
+document.getElementById("clearBtn").onclick=clearAll;
+document.getElementById("resetBtn").onclick=clearAll;
+document.getElementById("runBtn").onclick=()=>{running=true;calculate()};
+document.getElementById("stopBtn").onclick=()=>{running=false;calculate()};
+document.querySelectorAll(".mode").forEach(btn=>btn.onclick=()=>{
+  document.querySelectorAll(".mode").forEach(x=>x.classList.remove("active"));
+  btn.classList.add("active");
+  calculate();
+});
+document.getElementById("batteryInput").oninput=()=>{
+  const b=components.find(c=>c.type==="battery");
+  if(b){b.value=Number(document.getElementById("batteryInput").value)||12;calculate()}
+};
+document.getElementById("saveBtn").onclick=()=>{
+  localStorage.setItem("mediaRangkaianV3",JSON.stringify({components,wires,junctions}));
+  message("Rangkaian tersimpan di browser.");
+};
 
 function addComponent(type){
- const d=DEF[type], count=comps.filter(c=>c.type===type).length+1;
- const c={id:nextId++,type,name:type==='battery'?d.name:d.name+' '+count,value:d.value,unit:d.unit,icon:d.icon,state:true,x:70+(comps.length%5)*145,y:90+Math.floor(comps.length/5)*125};
- comps.push(c);selectedId=c.id;if(type==='battery')document.getElementById('batteryVoltage').value=c.value;
- render();updateEditor();calculate();
+  const d=defaults[type], n=components.filter(c=>c.type===type).length+1;
+  const c={id:nextId++,type,name:type==="battery"?d.name:d.name+" "+n,value:d.value,unit:d.unit,state:d.state??true,
+           x:65+(components.length%5)*145,y:95+Math.floor(components.length/5)*125};
+  components.push(c);selected=c.id;selectedJunction=null;
+  render();updateEditor();calculate();
 }
 function addJunction(){
- junctions.push({id:'j'+nextId++,x:280+(junctions.length%4)*160,y:330+Math.floor(junctions.length/4)*120});
- render();
+  const j={id:"j"+nextId++,x:250+(junctions.length%4)*150,y:300+Math.floor(junctions.length/4)*100};
+  junctions.push(j);selectedJunction=j.id;selected=null;setTool("select");render();message("Titik percabangan dibuat. Sekarang bisa digeser.");
 }
-function setTool(t){tool=t;firstTerminal=null;selectedWireId=null;render();toast(t==='connect'?'Klik terminal pertama lalu terminal kedua.':t==='cut'?'Klik kabel yang ingin diputus.':t==='delete'?'Klik komponen yang ingin dihapus.':'Mode pilih/pindah aktif.')}
-function terminalKey(id,side){return String(id)+':'+side}
-function positionOf(key){
- const [id,side]=String(key).split(':');
- const c=comps.find(x=>String(x.id)===id);
- if(c)return {x:c.x+(side==='L'?0:122),y:c.y+45};
- const j=junctions.find(x=>x.id===id);
- return j?{x:j.x,y:j.y}:null;
+function setTool(t){tool=t;startTerminal=null;selectedWire=null;render()}
+function terminalKey(id,side){return id+":"+side}
+function getPoint(key){
+  const [id,side]=key.split(":");
+  const c=components.find(x=>String(x.id)===id);
+  if(c)return{x:c.x+(side==="L"?0:120),y:c.y+44};
+  const j=junctions.find(x=>x.id===id);
+  if(j)return{x:j.x,y:j.y};
+  return null;
 }
-function addWire(a,b){
- if(!a||!b||a===b)return;
- if(!wires.some(w=>(w.a===a&&w.b===b)||(w.a===b&&w.b===a)))wires.push({id:'w'+nextId++,a,b});
+function connect(a,b){
+  if(!a||!b||a===b)return;
+  if(!wires.some(w=>(w.a===a&&w.b===b)||(w.a===b&&w.b===a)))
+    wires.push({id:"w"+Date.now()+Math.random(),a,b});
 }
 function onTerminal(e){
- e.stopPropagation();
- if(tool!=='connect')return;
- const k=e.currentTarget.dataset.key;
- if(!firstTerminal){firstTerminal=k;toast('Terminal pertama dipilih. Pilih terminal kedua.')}
- else{addWire(firstTerminal,k);firstTerminal=null;toast('Kabel dibuat.');calculate()}
- render();
-}
-function onWire(e){
- e.stopPropagation();
- const id=e.target.dataset.wire;
- if(tool==='cut'){wires=wires.filter(w=>w.id!==id);selectedWireId=null;calculate();return}
- selectedWireId=id;render();
+  e.stopPropagation();
+  if(tool!=="connect")return;
+  const k=e.currentTarget.dataset.key;
+  if(!startTerminal){startTerminal=k;render();message("Terminal pertama dipilih. Pilih terminal kedua.");return}
+  connect(startTerminal,k);startTerminal=null;render();calculate();
 }
 function render(){
- document.querySelectorAll('.component,.junction').forEach(e=>e.remove());
- comps.forEach(c=>{
-   const el=document.createElement('div');
-   const powered=running&&c.type==='lamp'&&lampIsPowered(c.id);
-   el.className='component'+(selectedId===c.id?' selected ':' ')+(powered?' lit':'')+(c.type==='switch'&&!c.state?' off':'');
-   el.style.left=c.x+'px';el.style.top=c.y+'px';el.dataset.id=c.id;
-   let visual=c.type==='voltmeter'||c.type==='ammeter'?`<span class="meter ${c.type==='ammeter'?'green':''}">${c.icon}</span>`:c.icon;
-   el.innerHTML=`<div class="terminal L" data-key="${terminalKey(c.id,'L')}"></div><div class="terminal R" data-key="${terminalKey(c.id,'R')}"></div><div class="title">${escapeHtml(c.name)}</div><div class="visual">${visual}</div><div class="value">${c.type==='switch'?(c.state?'ON':'OFF'):(c.value+' '+c.unit)}</div>`;
-   el.querySelectorAll('.terminal').forEach(t=>t.addEventListener('click',onTerminal));
-   el.addEventListener('click',e=>{if(e.target.classList.contains('terminal'))return;if(tool==='delete'){deleteComponent(c.id)}else if(tool==='select'){selectedId=c.id;updateEditor();render()}});
-   el.addEventListener('dblclick',()=>{if(c.type==='switch'){c.state=!c.state;calculate()}});
-   el.addEventListener('pointerdown',e=>startDrag(e,c));
-   canvas.appendChild(el);
- });
- junctions.forEach(j=>{
-   const el=document.createElement('div');el.className='junction';el.style.left=j.x+'px';el.style.top=j.y+'px';
-   el.title='Titik percabangan — seret untuk memindahkan';el.dataset.key=j.id+':J';
-   el.addEventListener('pointerdown',e=>{
-     e.stopPropagation();
-     if(tool==='select'){
-       const r=canvas.getBoundingClientRect();
-       drag={junction:j,ox:e.clientX-r.left-j.x,oy:e.clientY-r.top-j.y};
-       el.setPointerCapture?.(e.pointerId);
-       return;
-     }
-   });
-   el.addEventListener('click',e=>{
-     e.stopPropagation();
-     if(tool==='connect'){
-       if(!firstTerminal)firstTerminal=j.id+':J';
-       else{addWire(firstTerminal,j.id+':J');firstTerminal=null;calculate()}
-       render();
-     }else if(tool==='delete'){
-       junctions=junctions.filter(x=>x.id!==j.id);
-       wires=wires.filter(w=>w.a!==j.id+':J'&&w.b!==j.id+':J');
-       render();calculate();
-     }
-   });
-   canvas.appendChild(el);
- });
- drawWires();
- document.getElementById('hint').style.display=comps.length?'none':'block';
+  document.querySelectorAll(".component,.junction").forEach(e=>e.remove());
+  components.forEach(c=>{
+    const e=document.createElement("div");
+    const lampOn=c.type==="lamp"&&running&&componentCurrent(c.id)>0.0001;
+    e.className="component"+(selected===c.id?" selected ":" ")+(lampOn?" lampOn ":" ")+(c.type==="switch"&&c.state?" switchOn":"");
+    e.dataset.id=c.id;e.style.left=c.x+"px";e.style.top=c.y+"px";
+    e.innerHTML=`<div class="terminal left" data-key="${terminalKey(c.id,"L")}"></div>
+      <div class="terminal right" data-key="${terminalKey(c.id,"R")}"></div>
+      <div class="title">${escapeHtml(c.name)}</div>
+      <div class="visual">${c.icon||defaults[c.type].icon}</div>
+      <div class="value">${c.type==="switch"?(c.state?"ON":"OFF"):c.value+" "+c.unit}</div>`;
+    e.querySelectorAll(".terminal").forEach(t=>t.onclick=onTerminal);
+    e.onpointerdown=e2=>startComponentDrag(e2,c);
+    e.ondblclick=()=>{if(c.type==="switch"){c.state=!c.state;render();updateEditor();calculate()}};
+    e.onclick=e2=>{if(e2.target.classList.contains("terminal"))return;if(tool==="delete")deleteComponent(c.id);else if(tool==="select"){selected=c.id;selectedJunction=null;updateEditor();render()}};
+    B.appendChild(e);
+  });
+  junctions.forEach(j=>{
+    const e=document.createElement("div");
+    e.className="junction"+(selectedJunction===j.id?" selected":"");
+    e.style.left=j.x+"px";e.style.top=j.y+"px";e.dataset.jid=j.id;
+    e.title="Titik percabangan — bisa dipindahkan";
+    e.onpointerdown=e2=>startJunctionDrag(e2,j);
+    e.onclick=e2=>{e2.stopPropagation();if(tool==="delete")deleteJunction(j.id);else if(tool==="connect")onJunctionConnect(j);else{selectedJunction=j.id;selected=null;render()}};
+    B.appendChild(e);
+  });
+  drawWires();
+  document.getElementById("empty").style.display=components.length?"none":"block";
 }
-function startDrag(e,c){
- if(tool!=='select'||e.target.classList.contains('terminal'))return;
- selectedId=c.id;updateEditor();
- const r=canvas.getBoundingClientRect();
- drag={c,ox:e.clientX-r.left-c.x,oy:e.clientY-r.top-c.y};
- e.currentTarget.setPointerCapture?.(e.pointerId);
+function startComponentDrag(e,c){
+  if(tool!=="select"||e.target.classList.contains("terminal"))return;
+  selected=c.id;selectedJunction=null;updateEditor();
+  const r=B.getBoundingClientRect();
+  drag={kind:"component",obj:c,ox:e.clientX-r.left-c.x,oy:e.clientY-r.top-c.y};
 }
-canvas.addEventListener('pointermove',e=>{
- if(!drag)return;
- const r=canvas.getBoundingClientRect();
- if(drag.c){
-   drag.c.x=Math.max(3,Math.min(canvas.clientWidth-125,e.clientX-r.left-drag.ox));
-   drag.c.y=Math.max(3,Math.min(canvas.clientHeight-93,e.clientY-r.top-drag.oy));
- }else if(drag.junction){
-   drag.junction.x=Math.max(8,Math.min(canvas.clientWidth-8,e.clientX-r.left-drag.ox));
-   drag.junction.y=Math.max(8,Math.min(canvas.clientHeight-8,e.clientY-r.top-drag.oy));
- }
- render();
+function startJunctionDrag(e,j){
+  if(tool!=="select")return;
+  e.stopPropagation();selectedJunction=j.id;selected=null;
+  const r=B.getBoundingClientRect();
+  drag={kind:"junction",obj:j,ox:e.clientX-r.left-j.x,oy:e.clientY-r.top-j.y};
+}
+B.addEventListener("pointermove",e=>{
+  if(!drag)return;
+  const r=B.getBoundingClientRect();
+  if(drag.kind==="component"){
+    drag.obj.x=Math.max(5,Math.min(B.clientWidth-125,e.clientX-r.left-drag.ox));
+    drag.obj.y=Math.max(5,Math.min(B.clientHeight-92,e.clientY-r.top-drag.oy));
+  }else{
+    drag.obj.x=Math.max(5,Math.min(B.clientWidth-5,e.clientX-r.left-drag.ox));
+    drag.obj.y=Math.max(5,Math.min(B.clientHeight-5,e.clientY-r.top-drag.oy));
+  }
+  render();
 });
-canvas.addEventListener('pointerup',()=>drag=null);
-canvas.addEventListener('pointercancel',()=>drag=null);
-function drawWires(){
- wireLayer.innerHTML='';
- wires.forEach(w=>{
-   const a=positionOf(w.a),b=positionOf(w.b);if(!a||!b)return;
-   const line=document.createElementNS('http://www.w3.org/2000/svg','line');
-   line.setAttribute('x1',a.x);line.setAttribute('y1',a.y);line.setAttribute('x2',b.x);line.setAttribute('y2',b.y);
-   line.dataset.wire=w.id;line.classList.add('wire');
-   if(selectedWireId===w.id)line.classList.add('selected');
-   if(running&&wireCarriesCurrent(w))line.classList.add('live');
-   line.addEventListener('click',onWire);wireLayer.appendChild(line);
- });
- if(firstTerminal){const p=positionOf(firstTerminal);if(p){const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');circle.setAttribute('cx',p.x);circle.setAttribute('cy',p.y);circle.setAttribute('r',8);circle.setAttribute('fill','#ff9800');wireLayer.appendChild(circle)}}
-}
-function updateEditor(){
- const c=comps.find(x=>x.id===selectedId);
- if(!c){editor.innerHTML='Pilih komponen di area kerja.';return}
- editor.innerHTML=`<div class="preview">${c.type==='lamp'?'💡':c.icon}</div><h3>${escapeHtml(c.name)}</h3>
- <label>Nama<input id="editName" value="${escapeAttr(c.name)}"></label>
- ${c.type==='switch'?`<p>Status: <b>${c.state?'Hidup':'Mati'}</b></p>`:`<label>${c.type==='battery'?'Tegangan (V)':'Hambatan (Ω)'}<input id="editValue" type="number" min="0.1" step="0.1" value="${c.value}"></label>`}
- <button id="applyEdit">Terapkan</button>${c.type==='switch'?`<button id="toggleSwitch">${c.state?'Matikan':'Nyalakan'} Saklar</button>`:''}
- <button class="danger" id="deleteSelected">Hapus Komponen</button>
- ${c.type==='lamp'?`<p class="state ${running&&lampIsPowered(c.id)?'on':'off'}">${running&&lampIsPowered(c.id)?'● Lampu menyala':'● Lampu mati'}</p>`:''}`;
- document.getElementById('applyEdit').onclick=()=>{
-   c.name=document.getElementById('editName').value||c.name;
-   if(c.type!=='switch')c.value=Math.max(.1,Number(document.getElementById('editValue').value)||c.value);
-   if(c.type==='battery')document.getElementById('batteryVoltage').value=c.value;
-   render();updateEditor();calculate();
- };
- const t=document.getElementById('toggleSwitch');if(t)t.onclick=()=>{c.state=!c.state;render();updateEditor();calculate()};
- document.getElementById('deleteSelected').onclick=()=>deleteComponent(c.id);
-}
-function deleteComponent(id){comps=comps.filter(c=>c.id!==id);removeWiresFor(id);if(selectedId===id)selectedId=null;render();updateEditor();calculate()}
-function removeWiresFor(id){wires=wires.filter(w=>!String(w.a).startsWith(id+':')&&!String(w.b).startsWith(id+':'))}
-function clearAll(){if(confirm('Hapus semua komponen dan kabel?')){comps=[];wires=[];junctions=[];selectedId=null;selectedWireId=null;firstTerminal=null;running=false;render();updateEditor();calculate()}}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
-function escapeAttr(s){return escapeHtml(s)}
+window.addEventListener("pointerup",()=>drag=null);
 
-function unionFind(n){const p=Array.from({length:n},(_,i)=>i);function f(a){while(p[a]!==a){p[a]=p[p[a]];a=p[a]}return a}return {find:f,union:(a,b)=>{a=f(a);b=f(b);if(a!==b)p[b]=a}}}
+function onJunctionConnect(j){
+  const k=j.id+":J";
+  if(!startTerminal){startTerminal=k;render();message("Titik percabangan dipilih. Pilih terminal/titik lain.");}
+  else{connect(startTerminal,k);startTerminal=null;render();calculate()}
+}
+function drawWires(){
+  SVG.innerHTML="";
+  wires.forEach(w=>{
+    const a=getPoint(w.a),b=getPoint(w.b);if(!a||!b)return;
+    const line=document.createElementNS("http://www.w3.org/2000/svg","path");
+    const mx=(a.x+b.x)/2;
+    line.setAttribute("d",`M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`);
+    line.dataset.id=w.id;line.classList.add("wire");
+    if(selectedWire===w.id)line.classList.add("selected");
+    if(running&&wireCarriesCurrent(w))line.classList.add("power");
+    line.onclick=e=>{
+      e.stopPropagation();
+      if(tool==="cut"){wires=wires.filter(x=>x.id!==w.id);selectedWire=null;render();calculate();return}
+      selectedWire=w.id;render();message("Kabel dipilih. Gunakan mode Putus Kabel untuk memutusnya.");
+    };
+    SVG.appendChild(line);
+  });
+  if(startTerminal){
+    const p=getPoint(startTerminal);
+    if(p){
+      const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
+      c.setAttribute("cx",p.x);c.setAttribute("cy",p.y);c.setAttribute("r",8);c.setAttribute("fill","#ff9800");SVG.appendChild(c);
+    }
+  }
+}
+function deleteComponent(id){
+  components=components.filter(c=>c.id!==id);
+  wires=wires.filter(w=>!w.a.startsWith(id+":")&&!w.b.startsWith(id+":"));
+  if(selected===id)selected=null;render();updateEditor();calculate();
+}
+function deleteJunction(id){
+  junctions=junctions.filter(j=>j.id!==id);
+  wires=wires.filter(w=>!w.a.startsWith(id+":")&&!w.b.startsWith(id+":"));
+  selectedJunction=null;render();calculate();
+}
+function clearAll(){if(confirm("Hapus semua komponen, titik percabangan, dan kabel?")){components=[];wires=[];junctions=[];selected=null;selectedJunction=null;render();updateEditor();calculate()}}
+function updateEditor(){
+  const c=components.find(x=>x.id===selected);
+  const none=document.getElementById("nonePanel"),ed=document.getElementById("editor");
+  if(!c){none.hidden=false;ed.hidden=true;return}
+  none.hidden=true;ed.hidden=false;
+  ed.innerHTML=`<div class="bigIcon">${defaults[c.type].icon}</div>
+  <b>${escapeHtml(c.name)}</b>
+  <label>Nama<input id="editName" value="${escapeHtml(c.name)}"></label>
+  <label>${c.type==="battery"?"Tegangan (V)":"Nilai ("+c.unit+")"}<input id="editValue" type="number" value="${c.value}" ${c.type==="switch"?"disabled":""}></label>
+  ${c.type==="switch"?`<button id="toggleSwitch">${c.state?"Matikan":"Nyalakan"} Saklar</button>`:""}
+  <button id="applyEdit">Terapkan</button><button id="removeEdit" class="danger">Hapus Komponen</button>
+  <p>${c.type==="lamp"?(running&&componentCurrent(c.id)>0.0001?"💡 Lampu menyala":"○ Lampu mati"):""}</p>`;
+  document.getElementById("applyEdit").onclick=()=>{
+    c.name=document.getElementById("editName").value||c.name;
+    if(c.type!=="switch")c.value=Math.max(0.1,Number(document.getElementById("editValue").value)||c.value);
+    if(c.type==="battery")document.getElementById("batteryInput").value=c.value;
+    render();updateEditor();calculate();
+  };
+  document.getElementById("removeEdit").onclick=()=>deleteComponent(c.id);
+  const sw=document.getElementById("toggleSwitch");
+  if(sw)sw.onclick=()=>{c.state=!c.state;render();updateEditor();calculate()};
+}
+
 function buildNodes(){
- const terms=[];comps.forEach(c=>{terms.push(terminalKey(c.id,'L'),terminalKey(c.id,'R'))});junctions.forEach(j=>terms.push(j.id+':J'));
- const idx=new Map(terms.map((x,i)=>[x,i])), uf=unionFind(terms.length);
- wires.forEach(w=>{if(idx.has(w.a)&&idx.has(w.b))uf.union(idx.get(w.a),idx.get(w.b))});
- // closed switch is a zero-ohm connection
- comps.filter(c=>c.type==='switch'&&c.state).forEach(c=>uf.union(idx.get(terminalKey(c.id,'L')),idx.get(terminalKey(c.id,'R'))));
- const roots=new Map(), nodeOf={};let k=0;
- terms.forEach(t=>{const r=uf.find(idx.get(t));if(!roots.has(r))roots.set(r,k++);nodeOf[t]=roots.get(r)});
- return {nodeOf,count:k};
+  const parent={};
+  const find=x=>{parent[x]??=x;return parent[x]===x?x:(parent[x]=find(parent[x]))};
+  const union=(a,b)=>{a=find(a);b=find(b);if(a!==b)parent[b]=a};
+  const all=[];
+  components.forEach(c=>{all.push(c.id+":L",c.id+":R")});
+  junctions.forEach(j=>all.push(j.id+":J"));
+  all.forEach(x=>parent[x]=x);
+  wires.forEach(w=>union(w.a,w.b));
+  const node={};all.forEach(x=>node[x]=find(x));
+  return node;
 }
-function gaussian(A,b){
- const n=b.length;
- for(let col=0;col<n;col++){
-   let pivot=col;for(let r=col+1;r<n;r++)if(Math.abs(A[r][col])>Math.abs(A[pivot][col]))pivot=r;
-   if(Math.abs(A[pivot][col])<1e-10)return null;
-   [A[pivot],A[col]]=[A[col],A[pivot]];[b[pivot],b[col]]=[b[col],b[pivot]];
-   const div=A[col][col];for(let j=col;j<n;j++)A[col][j]/=div;b[col]/=div;
-   for(let r=0;r<n;r++){if(r===col)continue;const f=A[r][col];if(Math.abs(f)<1e-12)continue;for(let j=col;j<n;j++)A[r][j]-=f*A[col][j];b[r]-=f*b[col]}
- }
- return b;
-}
+function activeComponents(){return components.filter(c=>c.type==="resistor"||c.type==="lamp"||c.type==="switch")}
 function solveCircuit(){
- const battery=comps.find(c=>c.type==='battery');if(!battery)return {ok:false,msg:'Tambahkan baterai.'};
- const {nodeOf,count}=buildNodes();
- const p=terminalKey(battery.id,'L'),n=terminalKey(battery.id,'R');
- const pn=nodeOf[p], nn=nodeOf[n];
- if(pn===nn)return {ok:false,msg:'Rangkaian mengalami hubung singkat. Periksa kabel.'};
- // active resistive components only; switches are already merged
- const loads=comps.filter(c=>c.type==='resistor'||c.type==='lamp');
- const N=count, M=1, size=N+M, A=Array.from({length:size},()=>Array(size).fill(0)), b=Array(size).fill(0);
- // negative battery node is ground (force its voltage = 0)
- // To avoid floating-node singularities, solve only if every relevant node connects through loads/source.
- loads.forEach(c=>{
-   const a=nodeOf[terminalKey(c.id,'L')],d=nodeOf[terminalKey(c.id,'R')],R=Math.max(.01,Number(c.value)||1),g=1/R;
-   A[a][a]+=g;A[d][d]+=g;A[a][d]-=g;A[d][a]-=g;
- });
- // voltage source: V(pos)-V(neg)=battery.value
- const vs=N;
- A[pn][vs]+=1;A[vs][pn]+=1;A[nn][vs]-=1;A[vs][nn]-=1;b[vs]=Number(battery.value)||12;
- // Fix negative node to 0 by replacing its row, but keep source equations.
- for(let j=0;j<size;j++){A[nn][j]=0} A[nn][nn]=1;b[nn]=0;
- const x=gaussian(A,b);if(!x)return {ok:false,msg:'Rangkaian belum membentuk jalur tertutup.'};
- const voltages=x.slice(0,N);
- const currents={};
- loads.forEach(c=>{const a=voltages[nodeOf[terminalKey(c.id,'L')]],d=voltages[nodeOf[terminalKey(c.id,'R')]];currents[c.id]=(a-d)/Math.max(.01,c.value)});
- const total=Math.abs(x[vs]);
- return {ok:true,voltages,currents,total,battery,batteryNodes:{pos:pn,neg:nn}};
+  const battery=components.find(c=>c.type==="battery");
+  if(!battery)return {ok:false,reason:"Tambahkan baterai."};
+  const node=buildNodes();
+  const p=node[battery.id+":R"], n=node[battery.id+":L"];
+  if(p===undefined||n===undefined||p===n)return {ok:false,reason:"Terminal baterai belum terhubung dengan benar."};
+  const conductive=(c)=>c.type!=="switch"||c.state;
+  const graph={};
+  Object.keys(node).forEach(k=>{graph[node[k]]??=new Set()});
+  components.filter(conductive).forEach(c=>{
+    if(c.type==="battery"||c.type==="voltmeter"||c.type==="ammeter")return;
+    const a=node[c.id+":L"],b=node[c.id+":R"];if(a!==undefined&&b!==undefined){graph[a].add(b);graph[b].add(a)}
+  });
+  // voltage-source terminals must be connected through a conducting load path
+  const q=[p],seen=new Set(q);
+  while(q.length){const x=q.shift();for(const y of graph[x]||[]){if(!seen.has(y)){seen.add(y);q.push(y)}}}
+  if(!seen.has(n))return {ok:false,reason:"Rangkaian belum tertutup. Hubungkan jalur dari (+) baterai kembali ke (−)."};
+  const nodes=[...new Set(Object.values(node))].filter(x=>x!==n&&x!==p);
+  const index=new Map(nodes.map((x,i)=>[x,i]));
+  const N=nodes.length,A=Array.from({length:N},()=>Array(N).fill(0)),z=Array(N).fill(0);
+  function addG(a,b,g){
+    if(a!==n&&a!==p){A[index.get(a)][index.get(a)]+=g;if(b===p)z[index.get(a)]+=g*battery.value;else if(b!==n)A[index.get(a)][index.get(b)]-=g}
+    if(b!==n&&b!==p){A[index.get(b)][index.get(b)]+=g;if(a===p)z[index.get(b)]+=g*battery.value;else if(a!==n)A[index.get(b)][index.get(a)]-=g}
+  }
+  const conductors=[];
+  components.forEach(c=>{
+    if(c.type==="resistor"||c.type==="lamp"||(c.type==="switch"&&c.state)){
+      const a=node[c.id+":L"],b=node[c.id+":R"];
+      const r=c.type==="switch"?1e-6:Math.max(.1,c.value);
+      addG(a,b,1/r);conductors.push({c,a,b,r});
+    }
+  });
+  function gauss(M,y){
+    const m=M.map((row,i)=>row.slice().concat(y[i]));
+    for(let col=0;col<m.length;col++){
+      let piv=col;for(let r=col+1;r<m.length;r++)if(Math.abs(m[r][col])>Math.abs(m[piv][col]))piv=r;
+      if(Math.abs(m[piv][col])<1e-10)return null;
+      [m[col],m[piv]]=[m[piv],m[col]];
+      for(let r=col+1;r<m.length;r++){const f=m[r][col]/m[col][col];for(let j=col;j<=m.length;j++)m[r][j]-=f*m[col][j]}
+    }
+    const x=Array(m.length).fill(0);
+    for(let i=m.length-1;i>=0;i--){let s=m[i][m.length];for(let j=i+1;j<m.length;j++)s-=m[i][j]*x[j];x[i]=s/m[i][i]}
+    return x;
+  }
+  const V=Array(N).fill(0);if(N){const sol=gauss(A,z);if(!sol)return {ok:false,reason:"Rangkaian memiliki simpul mengambang atau hubungan yang belum valid."};nodes.forEach((x,i)=>V[i]=sol[i])}
+  const voltage=k=>k===p?battery.value:(k===n?0:(index.has(k)?V[index.get(k)]:0));
+  const currents={};conductors.forEach(o=>{currents[o.c.id]=(voltage(o.a)-voltage(o.b))/o.r});
+  let total=0;conductors.filter(o=>o.c.type!=="switch").forEach(o=>{if(o.a===p)total+=Math.abs(currents[o.c.id]);});
+  // Better total current: sum current leaving positive battery node
+  total=conductors.reduce((s,o)=>s+(o.a===p?currents[o.c.id]:o.b===p?-currents[o.c.id]:0),0);
+  return {ok:true,battery,nodes,node,voltage,currents,total};
+}
+function componentCurrent(id){const s=solveCircuit();return s.ok?Math.abs(s.currents[id]||0):0}
+function wireCarriesCurrent(w){
+  const s=solveCircuit();if(!s.ok)return false;
+  const connectedIds=new Set([w.a.split(":")[0],w.b.split(":")[0]]);
+  return [...connectedIds].some(id=>Math.abs(s.currents[id]||0)>0.0001);
 }
 function calculate(){
- const mode=document.querySelector('.mode.active')?.dataset.mode||'seri';
- const s=solveCircuit();
- if(!s.ok){results.innerHTML=`<b>${escapeHtml(s.msg)}</b><br><small>Hubungkan terminal positif baterai → komponen → kembali ke terminal negatif. Untuk paralel, buat dua titik percabangan yang terhubung ke jalur atas dan bawah.</small>`;render();return}
- const loads=comps.filter(c=>c.type==='resistor'||c.type==='lamp');
- // equivalent resistance from source voltage / total current
- const V=Math.abs(Number(s.battery.value)||12), I=s.total, Rt=I>1e-9?V/I:Infinity;
- let html=`<div>Tegangan (V) <b class="rightval">: ${V.toFixed(2)} V</b></div><div>Hambatan Total (R<sub>T</sub>) <b class="rightval">: ${Number.isFinite(Rt)?Rt.toFixed(2):'∞'} Ω</b></div><div>Arus Total (I) <b class="rightval">: ${I.toFixed(3)} A</b></div>`;
- if(loads.length){html+='<hr><b>Arus tiap komponen</b>';loads.forEach(c=>{html+=`<div>${escapeHtml(c.name)} (${c.value} Ω) <b class="rightval">: ${Math.abs(s.currents[c.id]||0).toFixed(3)} A</b></div>`})}
- results.innerHTML=html;render();
+  const mode=document.querySelector(".mode.active")?.dataset.mode||"seri";
+  const s=solveCircuit(),box=document.getElementById("results");
+  if(!s.ok){box.innerHTML=s.reason;render();return}
+  const loads=components.filter(c=>c.type==="resistor"||c.type==="lamp");
+  const totalR=s.battery.value/(Math.max(1e-12,s.total));
+  let branch=loads.map(c=>`<div>${escapeHtml(c.name)} (${c.value} Ω) &nbsp; I = <b>${componentCurrent(c.id).toFixed(3)} A</b></div>`).join("");
+  box.innerHTML=`<div>Tegangan (V): <b>${s.battery.value.toFixed(2)} V</b></div>
+  <div>Hambatan Total (R<sub>T</sub>): <b>${totalR.toFixed(2)} Ω</b></div>
+  <div>Arus Total (I): <b>${Math.abs(s.total).toFixed(3)} A</b></div>
+  <hr><b>${mode==="paralel"?"Cabang Paralel /":"Komponen /"}</b>${branch||"<div>Belum ada beban.</div>"}`;
+  render();
 }
-function lampIsPowered(id){const s=solveCircuit();return !!(s.ok&&Math.abs(s.currents[id]||0)>1e-6)}
-function wireCarriesCurrent(w){
- // Highlight every wire that belongs to the battery-connected component when running.
- // Exact current direction is not required for visualization.
- if(!running)return false;const s=solveCircuit();if(!s.ok)return false;
- const {nodeOf}=buildNodes();return nodeOf[w.a]!==undefined&&nodeOf[w.b]!==undefined;
-}
-function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';clearTimeout(window._toast);window._toast=setTimeout(()=>t.style.display='none',1700)}
-
-const saved=localStorage.getItem('rangkaianListrikRevisi');
-if(saved){try{const o=JSON.parse(saved);comps=o.comps||[];wires=o.wires||[];junctions=o.junctions||[];nextId=1+Math.max(0,...comps.map(c=>Number(c.id)||0));}catch(e){}}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function message(t){const m=document.getElementById("message");m.textContent=t;m.style.display="block";clearTimeout(window.mt);window.mt=setTimeout(()=>m.style.display="none",1800)}
+const saved=localStorage.getItem("mediaRangkaianV3");
+if(saved){try{const d=JSON.parse(saved);components=d.components||[];wires=d.wires||[];junctions=d.junctions||[];nextId=Math.max(1,...components.map(c=>Number(c.id)||0))+1}catch(e){}}
 render();updateEditor();calculate();
